@@ -43,9 +43,24 @@ def subscribe(update: Update, context: CallbackContext) -> None:
         subsID = str(chat_id)+'_'+str(uuid.uuid4())[:6]
         context.user_data[subsID] = link
         update.message.reply_text('You are subscribed. Subscription ID: ' + subsID)
-        context.job_queue.run_repeating(prepare_message, interval=60, first=1, context={'chat_id':chat_id,'link':link}, name=subsID)
+        subsctiption_job(context,{'chat_id':chat_id,'link':link},subsID)
+        # context.job_queue.run_repeating(prepare_message, interval=60, first=1, context={'chat_id':chat_id,'link':link}, name=subsID)
       else:
         update.message.reply_text('Please send me the RIGHT link with filter, for example https://www.bazaraki.com/real-estate/')
+
+def restore_subscriptions(dispatcher):
+  user_data = dispatcher.user_data
+  logging.debug(user_data)
+  if len(user_data) > 0:
+    logging.info("Restoring subscriptions...")
+    for chat_id in user_data:
+      for subs_id in user_data[chat_id]:
+        link = user_data[chat_id][subs_id]
+        subsctiption_job(dispatcher,{'chat_id':chat_id,'link':link},subs_id)
+
+def subsctiption_job(dispatcher,context,subsid):
+  dispatcher.job_queue.run_repeating(prepare_message, interval=60, first=1, context=context, name=subsid)
+
 
 def prepare_message(context):
     """Send the message."""
@@ -112,11 +127,11 @@ def remove_job_if_exists(name, context):
     """Remove job with given name. Returns whether job was removed."""
     # current_jobs = context.job_queue.get_jobs_by_name(name)
     current_jobs = context.user_data
-    del current_jobs[name]
-    # if not current_jobs:
-    #     return False
-    # for job in current_jobs:
-    #     job.schedule_removal()
+    if not current_jobs:
+        return False
+    for job in current_jobs:
+        job.schedule_removal()
+        del current_jobs[name]
     return True
 
 def jobList(update: Update, context: CallbackContext) -> None:
@@ -141,12 +156,17 @@ def main():
     updater = Updater(TOKEN, persistence=pp, use_context=True)
 
     dispatcher = updater.dispatcher
+    #restore previos subscriptions
+    restore_subscriptions(dispatcher)
     # on different commands - answer in Telegram
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("help", start))
     dispatcher.add_handler(CommandHandler("subscribe", subscribe))
     dispatcher.add_handler(CommandHandler("unsubscribe", unsubscribe))
     dispatcher.add_handler(CommandHandler("list", jobList))
+    
+    
+
     updater.start_polling()
     updater.idle()
 
