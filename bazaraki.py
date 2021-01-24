@@ -6,10 +6,10 @@ from bs4 import BeautifulSoup as bs
 import pandas as pd
 from random import randrange
 from telegram import Update
-from telegram.ext import Updater, CommandHandler, CallbackContext, PicklePersistence
+from telegram.ext import Updater, CommandHandler, CallbackContext, PicklePersistence, MessageHandler, Filters
 import re
 
-regex = re.compile(r'^(?:http)s?://(www.)?bazaraki.com/.+', re.IGNORECASE)
+regex = re.compile(r'^(?:http)s?://(www\.)?bazaraki\.com/.+', re.IGNORECASE)
 
 
 # Enable logging
@@ -31,8 +31,7 @@ Use /list to show current subscription
 Use /unsubscribe and subscriptionID to unsubscribe''')
 
 def subscribe(update: Update, context: CallbackContext) -> None:
-    print(update)
-    print(context)
+    logging.debug(update)
     chat_id = update.message.chat_id
     if not context.args:
       update.message.reply_text("Please send me the link, for example https://www.bazaraki.com/real-estate/")
@@ -40,55 +39,71 @@ def subscribe(update: Update, context: CallbackContext) -> None:
       link = context.args[0]
       #validate baxaraki link
       if re.match(regex, link) is not None:
-        subsID = str(chat_id)+'_'+str(uuid.uuid4())[:6]
-        context.user_data[subsID] = link
+        subsID = str(uuid.uuid4())[:6]
+        if chat_id not in context.bot_data:
+          context.bot_data[chat_id] = {}
+        context.bot_data[chat_id][subsID] = {"link" : link, "lastId": ""}
         update.message.reply_text('You are subscribed. Subscription ID: ' + subsID)
-        subsctiption_job(context,{'chat_id':chat_id,'link':link},subsID)
+
+        subsctiption_job(context,subsID,chat_id)
         # context.job_queue.run_repeating(prepare_message, interval=60, first=1, context={'chat_id':chat_id,'link':link}, name=subsID)
       else:
         update.message.reply_text('Please send me the RIGHT link with filter, for example https://www.bazaraki.com/real-estate/')
 
 def restore_subscriptions(dispatcher):
-  user_data = dispatcher.user_data
-  logging.debug(user_data)
-  if len(user_data) > 0:
+  bot_data = dispatcher.bot_data
+  if len(bot_data) > 0:
     logging.info("Restoring subscriptions...")
-    for chat_id in user_data:
-      for subs_id in user_data[chat_id]:
-        link = user_data[chat_id][subs_id]
-        subsctiption_job(dispatcher,{'chat_id':chat_id,'link':link},subs_id)
+    logging.info(bot_data)
+    for chat_id in bot_data:
+      for subs_id in bot_data[chat_id]:
+        subsctiption_job(dispatcher,subs_id,chat_id)
+  else:
+    dispatcher.bot_data = {}
 
-def subsctiption_job(dispatcher,context,subsid):
-  dispatcher.job_queue.run_repeating(prepare_message, interval=60, first=1, context=context, name=subsid)
+def subsctiption_job(dispatcher,subsid,chat_id):
+  dispatcher.job_queue.run_repeating(prepare_message, interval=60, first=1, context={'dispatcher':dispatcher,'chat_id':chat_id}, name=subsid)
 
 
 def prepare_message(context):
     """Send the message."""
     job = context.job
-    global last_sended_adv
-    # print(last_sended_adv)
-    last_advs_list = parse(job.context['link'])
-    if job.name not in last_sended_adv.keys():
+    chat_id = job.context['chat_id']
+
+    last_sended_adv = job.context['dispatcher'].bot_data[chat_id][job.name]['lastId']
+    last_advs_list = parse(job.context['dispatcher'].bot_data[chat_id][job.name]['link'])
+    if len(last_sended_adv) == 0:
       last_adv = last_advs_list[-1]
-      last_sended_adv[job.name] = last_adv['adv_href']
+      job.context['dispatcher'].bot_data[chat_id][job.name]['lastId'] = last_adv['adv_href']
       adv_to_send = last_adv
-      send_message(context, adv_to_send)
+      send_message(context, adv_to_send, chat_id)
     else:
-      last_index_in_list = len(last_advs_list) - 1
-      for dict_ in [x for x in last_advs_list if x["adv_href"] == last_sended_adv[job.name]]:
-        last_sended_adv_index = (last_advs_list.index(dict_))
-      
-      if last_sended_adv_index < last_index_in_list:
-        unsended_advs = last_advs_list[last_sended_adv_index + 1:last_index_in_list + 1]
-        for adv_to_send in unsended_advs:
-          last_sended_adv[job.name] = adv_to_send['adv_href']
-          send_message(context, adv_to_send)
-      else:
-        logging.info('Job ' + str(job.name) + ' No new advs')
-  
-def send_message(context,adv_to_send):
+      try:
+        last_index_in_list = len(last_advs_list) - 1
+        for dict_ in [x for x in last_advs_list if x["adv_href"] == last_sended_adv]:
+          last_sended_adv_index = (last_advs_list.index(dict_))
+        
+        if last_sended_adv_index < last_index_in_list:
+          unsended_advs = last_advs_list[last_sended_adv_index + 1:last_index_in_list + 1]
+          for adv_to_send in unsended_advs:
+            job.context['dispatcher'].bot_data[chat_id][job.name]['lastId'] = adv_to_send['adv_href']
+            send_message(context, adv_to_send,chat_id)
+        else:
+          logging.info('User: ' + str(job.context['chat_id']) + ' Job: ' + str(job.name) + ' No new advs')
+      except:
+        last_adv = last_advs_list[-1]
+        job.context['dispatcher'].bot_data[chat_id][job.name]['lastId'] = last_adv['adv_href']
+        adv_to_send = last_adv
+        send_message(context, adv_to_send, chat_id)
+
+
+def send_message(context,adv_to_send,chat_id):
     job = context.job
-    context.bot.send_message(job.context['chat_id'], parse_mode='HTML', text=("<a href='{}{}'> {} </a>".format(WEBSITE_DOMAIN,adv_to_send['adv_href'],adv_to_send['adv_title'])))
+
+    context.bot.send_message(chat_id, 
+                             parse_mode='HTML', 
+                             text=("<a href='{}{}'> {} </a>".format(WEBSITE_DOMAIN,adv_to_send['adv_href'],adv_to_send['adv_title']))
+                             )
     logging.info('Job ' + str(job.name) + ' Sending message: ' + str(adv_to_send) )
 
 def parse(url):
@@ -114,41 +129,42 @@ def parse(url):
 
 def unsubscribe(update: Update, context: CallbackContext) -> None:
     """Remove the job if the user changed their mind."""
-    # chat_id = update.message.chat_id
-    if len(context.args) > 0:
-      subsID = context.args[0]
-      job_removed = remove_job_if_exists(subsID, context)
-      text = 'Subscription cancelled!' if job_removed else 'You have no subscription'
+    chat_id = update.message.chat_id
+    args = update.message.text.split("_")[1]
+    if len(args) > 0:
+      subsID = args
+      job_removed = remove_job_if_exists(subsID, context, chat_id)
+      text = 'Subscription ' + subsID + ' cancelled!' if job_removed else 'You have no subscription'
     else:
       text = "Please send me subscriptionID from /list"
     update.message.reply_text(text)
 
-def remove_job_if_exists(name, context):
+def remove_job_if_exists(subsID, context,chat_id):
     """Remove job with given name. Returns whether job was removed."""
-    # current_jobs = context.job_queue.get_jobs_by_name(name)
-    current_jobs = context.user_data
+    current_jobs = context.job_queue.get_jobs_by_name(subsID)
     if not current_jobs:
         return False
     for job in current_jobs:
         job.schedule_removal()
-        del current_jobs[name]
+        del context.bot_data[chat_id][subsID]
     return True
 
 def jobList(update: Update, context: CallbackContext) -> None:
     """List of subscriptions."""
     message = ""
-    # print(type(context.job_queue.jobs()))
+    i = 0
+    chat_id = update.message.chat_id
     if len(context.job_queue.jobs()) > 0:
       for job in context.job_queue.jobs():
-        message = message + "/unsubscribe " + job.name + "\n"
+        if job.context['chat_id'] == chat_id:
+          i += 1
+          message = message + "/unsubscribe_" + job.name + " " + context.bot_data[chat_id][job.name]['link'] + "\n"
     else:
       message = "No active subscribtions"
-    print(context.user_data)
-    chat_id = update.message.chat_id
-    # print(message)
+    if i == 0:
+      message = "No active subscribtions"
+    logging.debug(context.bot_data)
     context.bot.send_message(chat_id, parse_mode='HTML', text=message)
-
-    # update.message.reply_text(message)
 
 def main():
     """Run bot."""
@@ -162,14 +178,11 @@ def main():
     dispatcher.add_handler(CommandHandler("start", start))
     dispatcher.add_handler(CommandHandler("help", start))
     dispatcher.add_handler(CommandHandler("subscribe", subscribe))
-    dispatcher.add_handler(CommandHandler("unsubscribe", unsubscribe))
+    dispatcher.add_handler(MessageHandler(Filters.regex('^\/unsubscribe_.+$'), unsubscribe))
     dispatcher.add_handler(CommandHandler("list", jobList))
-    
-    
 
     updater.start_polling()
     updater.idle()
 
 if __name__ == '__main__':
     main()
-    # parse('https://www.bazaraki.com/car-motorbikes-boats-and-parts/cars-trucks-and-vans/lemesos-district-limassol/')
