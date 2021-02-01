@@ -61,6 +61,14 @@ def send_message(context,adv_to_send,chat_id):
     logging.info('Job ' + str(job.name) + ' Sending message: ' + str(adv_to_send) )
 
 def parse(url):
+  # fix different default type_view
+    if url.endswith('/'):
+      url = url + '?type_view=line'
+    elif url.endswith('line'):
+      pass
+    else :
+      url = url + '?type_view=line'
+
     r = requests.get(url)
     soup = bs(r.text, "html.parser")
     last_advs_list = []
