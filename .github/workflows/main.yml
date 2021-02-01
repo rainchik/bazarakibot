@@ -34,7 +34,7 @@ jobs:
           context: ./
           file: ./Dockerfile
           push: true
-          tags: rainchik/bazarakibot:${CI_COMMIT_SHA:0:8}
+          tags: rainchik/bazarakibot:latest
 
       - name: Image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
