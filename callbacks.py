@@ -7,9 +7,9 @@ from helpers import subsctiption_job,remove_job_if_exists
 from settings import REGEX
 
 def start(update: Update, context: CallbackContext) -> None:
-    update.message.reply_text('''Hi! BazarakiBot welkomes you!
-Use /subscribe and URL to subscribe to Bazaraki advs
-Use /list to show current subscription
+    update.message.reply_text('''Hi! BazarakiBot welcomes you!
+Use /subscribe https://www.bazaraki.com/real-estate/ (URL to subscribe to Bazaraki advs) 
+Use /list - to show current subscription
 Use /unsubscribe and subscriptionID to unsubscribe''')
 
 def subscribe(update: Update, context: CallbackContext) -> None:
@@ -56,6 +56,13 @@ def jobList(update: Update, context: CallbackContext) -> None:
           message = message + "/unsubscribe_" + job.name + " " + context.bot_data[chat_id][job.name]['link'] + "\n"
     if i == 0:
       message = "No active subscribtions"
+    logging.debug(context.bot_data)
+    context.bot.send_message(chat_id, parse_mode='HTML', text=message)
+
+def fullList(update: Update, context: CallbackContext) -> None:
+    """Full list of subscriptions."""
+    chat_id = update.message.chat_id
+    message = context.bot_data
     logging.debug(context.bot_data)
     context.bot.send_message(chat_id, parse_mode='HTML', text=message)
 

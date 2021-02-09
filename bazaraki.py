@@ -4,7 +4,7 @@ from telegram.ext import Updater, CommandHandler, PicklePersistence, MessageHand
 import re
 
 from helpers import restore_subscriptions
-from callbacks import start, subscribe, unsubscribe, jobList
+from callbacks import start, subscribe, unsubscribe, jobList, fullList
 from settings import TOKEN, LOGLEVEL, PERSISTENCE_VOL
 
 # Enable logging
@@ -34,6 +34,7 @@ def main():
     dispatcher.add_handler(CommandHandler("subscribe", subscribe))
     dispatcher.add_handler(MessageHandler(Filters.regex('^\/unsubscribe_.+$'), unsubscribe))
     dispatcher.add_handler(CommandHandler("list", jobList))
+    dispatcher.add_handler(CommandHandler("fulllist", fullList))
 
     updater.start_polling()
     updater.idle()

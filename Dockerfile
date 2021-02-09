@@ -1,6 +1,3 @@
-#
-# ~ Copyright © 2021 Aram Meem Company Limited.  All Rights Reserved.
-#
 FROM python:3.7.4-slim-stretch
 
 LABEL maintainer "Alexander Rainchik<rainchik>"
