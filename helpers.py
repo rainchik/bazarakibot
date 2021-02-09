@@ -58,7 +58,7 @@ def send_message(context,adv_to_send,chat_id):
                              parse_mode='HTML', 
                              text=("<a href='{}{}'> {} </a>".format(WEBSITE_DOMAIN,adv_to_send['adv_href'],adv_to_send['adv_title']))
                              )
-    logging.info('User: ' + chat_id + ' Job: ' + str(job.name) + ' Sending message: ' + str(adv_to_send) )
+    logging.info('User: ' + str(chat_id) + ' Job: ' + str(job.name) + ' Sending message: ' + str(adv_to_send) )
 
 def parse(url):
   # fix different default type_view
